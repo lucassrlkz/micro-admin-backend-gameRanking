@@ -1,132 +1,155 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Micro Admin Backend - Game Ranking
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Microsserviço de administração do sistema de ranking de jogos. A aplicação recebe mensagens do RabbitMQ através de um [API-GATEWAY](https://github.com/lucassrlkz/api-gateway-gameRanking) , persiste categorias no MongoDB e disponibiliza operações de consulta de categorias por mensageria.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tecnologias
 
-## Description
+- Node.js e TypeScript
+- NestJS para módulos, injeção de dependências e handlers de mensagens
+- RabbitMQ como transporte do microsserviço (`@nestjs/microservices`)
+- MongoDB com Mongoose para persistência
+- Jest para testes e Oxlint para lint
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Como funciona
 
-## Project setup
+O ponto de entrada em `src/main.ts` inicializa um microsserviço NestJS com o transporte RabbitMQ. Ele monta a URL de conexão com as variáveis `RABBITMQ_*`, conecta à fila configurada e aguarda mensagens. Não inicializa um servidor HTTP.
 
-```bash
-$ npm install
+O `AppController` define os padrões de mensagem e encaminha as operações para o `AppService`:
+
+| Padrão | Tipo | Payload | Comportamento |
+| --- | --- | --- | --- |
+| `criar-categoria` | Evento (`EventPattern`) | Objeto de categoria | Persiste uma categoria no MongoDB. Como é um evento, não há resposta de consulta. |
+| `consultar-categorias` | Mensagem (`MessagePattern`) | ID como string ou payload vazio | Com ID, consulta uma categoria; sem ID, retorna todas as categorias. |
+
+Exemplo de payload para `criar-categoria`:
+
+```json
+{
+  "category": "arcade",
+  "description": "Jogos de arcade",
+  "events": [
+    {
+      "name": "victory",
+      "operation": "sum",
+      "value": 10
+    }
+  ],
+  "players": []
+}
 ```
 
-## Compile and run the project
+Para consultar uma categoria, envie o ID do MongoDB como payload de `consultar-categorias`. Para listar todas, envie um payload vazio ou sem ID.
 
-```bash
-# development
-$ npm run start
+Erros nas operações de persistência e consulta são registrados pelo serviço e encaminhados como `RpcException`.
 
-# watch mode
-$ npm run start:dev
+## Modelos de dados
 
-# production mode
-$ npm run start:prod
+Os schemas estão em `src/interfaces` e são registrados pelo `AppModule`:
+
+- **Categoria** (`categories`): nome (`category`, único), `description`, lista de `events` (cada evento tem `name`, `operation` e `value`) e referências a jogadores. O schema habilita `createdAt` e `updatedAt`.
+- **Jogador** (`players`): `name`, `email` (único), `phoneNumber`, referência à categoria, `ranking`, `positionRanking` e `urlPhoto`. O schema habilita `createdAt` e `updatedAt`.
+
+As referências entre categorias e jogadores usam os nomes de modelo `categories` e `players`. Os modelos e coleções são registrados mesmo que operações de jogador ainda não estejam implementadas no serviço.
+
+## Estrutura do projeto
+
+```text
+.
+├── src/
+│   ├── main.ts                          # Inicialização do microsserviço RabbitMQ
+│   ├── app.module.ts                    # Configuração global, MongoDB e schemas
+│   ├── app.controller.ts                # Padrões e handlers de mensagens
+│   ├── app.service.ts                   # Persistência e consultas de categorias
+│   ├── app.controller.spec.ts            # Teste unitário (scaffold legado)
+│   └── interfaces/
+│       ├── event.interface.ts            # Tipo de evento de categoria
+│       ├── categories/
+│       │   ├── category.interface.ts     # Tipo de categoria
+│       │   └── category.schema.ts        # Schema Mongoose de categoria
+│       └── players/
+│           ├── player.interface.ts       # Tipo de jogador
+│           └── player.schema.ts          # Schema Mongoose de jogador
+├── test/
+│   ├── app.e2e-spec.ts                   # Teste end-to-end (scaffold legado)
+│   └── jest-e2e.json                    # Configuração do Jest end-to-end
+├── package.json                          # Dependências e comandos npm
+├── package-lock.json                     # Versões resolvidas das dependências
+├── nest-cli.json                         # Configuração da CLI Nest
+├── tsconfig.json                         # Configuração do TypeScript
+├── tsconfig.build.json                   # Configuração de compilação
+├── jest.config.ts                        # Configuração do Jest
+└── .oxlintrc.json                        # Configuração do Oxlint
 ```
 
-## Run tests
+## Pré-requisitos
 
-```bash
-# unit tests
-$ npm run test
+- Node.js e npm compatíveis com as dependências do projeto
+- Uma instância acessível de MongoDB
+- Uma instância acessível de RabbitMQ e uma fila configurada
 
-# e2e tests
-$ npm run test:e2e
+## Configuração
 
-# test coverage
-$ npm run test:cov
+Crie um arquivo `.env` na raiz do projeto. Ele é carregado pelo `ConfigModule`; não coloque credenciais reais no controle de versão.
+
+```dotenv
+DB_CONNECTION=mongodb://<usuario>:<senha>@<host>:<porta>/<banco>
+
+RABBITMQ_PROTOCOL=amqp://
+RABBITMQ_USER=<usuario>
+RABBITMQ_PASSWORD=<senha>
+RABBITMQ_HOST=<host>:<porta>
+RABBITMQ_VIRTUAL_HOST=<caminho-do-vhost-na-url>
+RABBITMQ_QUEUE=<nome-da-fila>
 ```
 
-## Deployment
+`DB_CONNECTION` deve ser uma URI válida do MongoDB. O serviço falha explicitamente ao iniciar se essa variável estiver ausente.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+O endereço RabbitMQ é montado concatenando protocolo, usuário, senha, host e virtual host nesta ordem: `RABBITMQ_PROTOCOL + usuário + ":" + senha + "@" + RABBITMQ_HOST + RABBITMQ_VIRTUAL_HOST`. Portanto, configure os componentes para formar uma URL AMQP válida e codifique caracteres especiais usados em credenciais ou no caminho do virtual host. `RABBITMQ_QUEUE` define a fila consumida pelo microsserviço.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Em ambientes de produção, as mesmas variáveis podem ser fornecidas pelo ambiente de execução, sem arquivo `.env`.
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+## Instalação e execução
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
+Instale as dependências:
 
 ```bash
-$ npx @nestjs/observe link
+npm install
 ```
 
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand:
+Inicie em desenvolvimento, com reinicialização automática:
 
 ```bash
-$ npm install @nestjs/observe
+npm run start:dev
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
+Outros comandos disponíveis:
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+```bash
+npm run start       # Inicialização normal
+npm run start:debug # Inicialização em modo de depuração
+npm run build       # Compilação para dist/
+npm run start:prod  # Execução de dist/main após compilar
+npm run lint        # Oxlint em src/ e test/
+```
 
-## Resources
+O serviço só fica pronto quando consegue conectar ao RabbitMQ; as operações de dados também dependem da conexão com o MongoDB.
 
-Check out a few resources that may come in handy when working with NestJS:
+## Testes
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Comandos definidos no projeto:
 
-## Support
+```bash
+npm run test       # Testes unitários
+npm run test:e2e   # Testes end-to-end
+npm run test:cov   # Testes com cobertura
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Os testes existentes ainda são os scaffolds HTTP gerados pelo Nest: o teste unitário espera um método `getHello()` que não existe no controller atual, e o teste end-to-end tenta acessar uma rota HTTP, embora a aplicação inicialize somente o transporte RabbitMQ. Esses testes precisam ser atualizados para os handlers do microsserviço antes de serem usados como validação do comportamento atual.
 
-## Stay in touch
+## Comandos de desenvolvimento
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+npm run format
+```
 
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Formata os arquivos TypeScript em `src/` e `test/` com Prettier.
