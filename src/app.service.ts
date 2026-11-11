@@ -25,4 +25,25 @@ export class AppService {
       throw new RpcException(message);
     }
   }
+  async findAllCategories(): Promise<Category[]> {
+    try {
+      return await this.categoryModel.find().exec();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`error: ${JSON.stringify(message)}`);
+      throw new RpcException(message);
+    }
+  }
+
+  async findCategoryById(_id: string): Promise<Category | null> {
+    try {
+      return await this.categoryModel.findOne({ _id }).exec();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`error: ${JSON.stringify(message)}`);
+      throw new RpcException(message);
+    }
+  }
 }
