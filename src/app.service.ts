@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Category } from './interfaces/categories/category.interface';
+import {
+  Category,
+  UpdateCategory,
+} from './interfaces/categories/category.interface';
 import { Player } from './interfaces/players/player.interface';
 import { RpcException } from '@nestjs/microservices';
 
@@ -21,7 +24,7 @@ export class AppService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`error: ${JSON.stringify(message)}`);
+      this.logger.error(`Error (create-category): ${JSON.stringify(message)}`);
       throw new RpcException(message);
     }
   }
@@ -31,7 +34,9 @@ export class AppService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`error: ${JSON.stringify(message)}`);
+      this.logger.error(
+        `Error (find-all-categories: ${JSON.stringify(message)}`,
+      );
       throw new RpcException(message);
     }
   }
@@ -42,7 +47,22 @@ export class AppService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      this.logger.error(`error: ${JSON.stringify(message)}`);
+      this.logger.error(
+        `Error (find-category-by-id): ${JSON.stringify(message)}`,
+      );
+      throw new RpcException(message);
+    }
+  }
+
+  async updateCategory(_id: string, category: UpdateCategory): Promise<void> {
+    try {
+      await this.categoryModel
+        .findOneAndUpdate({ _id }, { $set: category })
+        .exec();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      this.logger.error(`Error (update-category): ${JSON.stringify(message)}`);
       throw new RpcException(message);
     }
   }

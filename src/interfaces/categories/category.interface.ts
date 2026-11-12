@@ -8,3 +8,7 @@ export interface Category extends Document {
   events: Array<Event>;
   players: Array<Player>;
 }
+export interface UpdateCategory extends Document {
+  description: string;
+  events: Array<Event>;
+}
