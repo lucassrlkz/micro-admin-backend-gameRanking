@@ -21,6 +21,7 @@ async function bootstrap() {
       transport: Transport.RMQ,
       options: {
         urls: [url],
+        noAck: false, // confirmação para o rmq de que a mensagem foi recebida e processada
         queue: rmq_queue,
       },
     },
